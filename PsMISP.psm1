@@ -11,7 +11,7 @@ Function Get-MISPAttributes
         , [Parameter(Mandatory = $false)] [string] [ValidateSet('Network activity')] $MispAttributeCategory = 'Network activity'
         , [Parameter(Mandatory = $true)] [string]  [ValidateSet('domain','url','ip-dst','ip-src')] $MispAttributeType
         , [Parameter(Mandatory = $false)] [int]  $LookbackDays    
-        , [Parameter(Mandatory = $false)] [string] $Tags 
+        , [Parameter(Mandatory = $false)] [string[]] $Tags 
         , [Parameter(Mandatory = $false)] [int] $MispPageSize = 100000
         , [Parameter(Mandatory = $false)] [bool] $enforceWarninglist = $true
         , [Parameter(Mandatory = $false)] [switch] $IncludeNonIDS
