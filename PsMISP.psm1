@@ -2,10 +2,8 @@
 [datetime] $script:UnixEpoch = '1970-01-01 00:00:00Z'
 
 
-Function Get-MISPAttributes
-{
-    param
-    (
+Function Get-MISPAttributes {
+    param (
         [Parameter(Mandatory = $true)] [string] $ApiKey
         , [Parameter(Mandatory = $true)] [string] $UriBase 
         , [Parameter(Mandatory = $false)] [string] [ValidateSet('Network activity')] $MispAttributeCategory = 'Network activity'
@@ -15,6 +13,7 @@ Function Get-MISPAttributes
         , [Parameter(Mandatory = $false)] [int] $MispPageSize = 100000
         , [Parameter(Mandatory = $false)] [bool] $enforceWarninglist = $true
         , [Parameter(Mandatory = $false)] [switch] $IncludeNonIDS
+        , [Parameter(Mandatory = $false)] [System.Collections.Hashtable] $OtherFilters
     )
 
     $url = "${UriBase}/attributes/restSearch"
@@ -27,8 +26,7 @@ Function Get-MISPAttributes
     $returnFormat = "json"
 
     Write-Verbose "Fetching page $page for type $t"
-    do
-    {
+    do {
         $reqbody = [pscustomobject] @{
             page=$page++
             limit = $MispPageSize
@@ -40,13 +38,16 @@ Function Get-MISPAttributes
             returnFormat = $returnFormat
         }
 
-        if(-not $IncludeNonIDS)
-        {
+        # Set any of the other filters supplied
+        foreach($name in $OtherFilters.Keys) {
+            $reqbody | Add-Member -NotePropertyName $name  -NotePropertyValue $OtherFilters[$name]
+        }
+
+        if(-not $IncludeNonIDS) {
             $reqbody | Add-Member -NotePropertyName "to_ids"  -NotePropertyValue "true"
         }
 
-        if($LookbackDays -gt 0)
-        {            
+        if($LookbackDays -gt 0) {            
             $reqbody | Add-Member -NotePropertyName "attribute_timestamp"  -NotePropertyValue ( "{0}d" -f $LookbackDays)
         }
 
@@ -59,16 +60,15 @@ Function Get-MISPAttributes
 
         Write-Verbose ("Page {0} complete" -f  ($page - 1))
 
-        switch($returnFormat)
-        {
+        switch($returnFormat) {
             "json" {
                 $content = $req.Content | ConvertFrom-Json
-                foreach($a in $content.response.Attribute)
-                {
+                foreach($a in $content.response.Attribute) {
                     $attributeResults +=  [PSCustomObject] @{
                         indicator = $a.value
                         id  = $a.id 
                         event_id = $a.event_id
+                        event_info = $a.Event.info
                         type = $a.type
                         timestamp = $a.timestamp
                         to_ids = $a.to_ids
