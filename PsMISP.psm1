@@ -1,23 +1,24 @@
 ﻿
 [datetime] $script:UnixEpoch = '1970-01-01 00:00:00Z'
-
-
 Function Get-MISPAttributes {
     param (
         [Parameter(Mandatory = $true)] [string] $ApiKey
-        , [Parameter(Mandatory = $true)] [string] $UriBase 
+        , [Parameter(Mandatory = $true)] [System.Uri] $UriBase 
         , [Parameter(Mandatory = $false)] [string] [ValidateSet('Network activity')] $MispAttributeCategory = 'Network activity'
         , [Parameter(Mandatory = $true)] [string]  [ValidateSet('domain','url','ip-dst','ip-src')] $MispAttributeType
-        , [Parameter(Mandatory = $false)] [int]  $LookbackDays    
-        , [Parameter(Mandatory = $false)] [string[]] $Tags 
+        , [Parameter(Mandatory = $false)] [int] $MispAttrMaxAgeDays
+        , [Parameter(Mandatory = $false)] [string[]] $Tags
         , [Parameter(Mandatory = $false)] [int] $MispPageSize = 100000
-        , [Parameter(Mandatory = $false)] [bool] $enforceWarninglist = $true
+        , [Parameter(Mandatory = $false)] [bool] $EnforceWarninglist = $true
         , [Parameter(Mandatory = $false)] [switch] $IncludeNonIDS
         , [Parameter(Mandatory = $false)] [System.Collections.Hashtable] $OtherFilters
     )
 
-    $url = "${UriBase}/attributes/restSearch"
-    $headers = @{"Authorization"=$ApiKey;Accept='application/json';}
+    $url = "{0}attributes/restSearch" -f $UriBase.AbsoluteUri
+    $headers = @{
+        Authorization = $ApiKey
+        Accept = 'application/json'
+    }
 
     $page = 1
     $attributeResults = @()
@@ -26,6 +27,7 @@ Function Get-MISPAttributes {
     $returnFormat = "json"
 
     Write-Verbose "Fetching page $page for type $t"
+
     do {
         $reqbody = [pscustomobject] @{
             page=$page++
@@ -34,7 +36,8 @@ Function Get-MISPAttributes {
             includeEventTags = "true"
             type = $MispAttributeType
             category = $MispAttributeCategory
-            enforceWarninglist = [int] $enforceWarninglist
+            enforceWarninglist = $EnforceWarninglist
+            includeWarninglistHits = $true
             returnFormat = $returnFormat
         }
 
@@ -47,8 +50,8 @@ Function Get-MISPAttributes {
             $reqbody | Add-Member -NotePropertyName "to_ids"  -NotePropertyValue "true"
         }
 
-        if($LookbackDays -gt 0) {            
-            $reqbody | Add-Member -NotePropertyName "attribute_timestamp"  -NotePropertyValue ( "{0}d" -f $LookbackDays)
+        if($MispAttrMaxAgeDays -gt 0) {        
+            $reqbody | Add-Member -NotePropertyName "attribute_timestamp"  -NotePropertyValue ( "{0}d" -f $MispAttrMaxAgeDays)
         }
 
         $body = ConvertTo-Json -InputObject $reqbody
@@ -56,7 +59,11 @@ Function Get-MISPAttributes {
         Write-Warning ("Requesting MISP attributes:  `r`n{0}" -f $body)
 
         # Using WebMethod so that we can access the headers
-        $req = Invoke-WebRequest -UseBasicParsing -Uri $url -Headers $headers -ContentType "application/json" -Method Post -Body $body
+        try{
+            $req = Invoke-WebRequest -UseBasicParsing -Uri $url -Headers $headers -ContentType "application/json" -Method Post -Body $body
+        } catch {
+            throw $_.Exception
+        }
 
         Write-Verbose ("Page {0} complete" -f  ($page - 1))
 
@@ -74,7 +81,8 @@ Function Get-MISPAttributes {
                         to_ids = $a.to_ids
                         confidence = $a.Tag | %{ if($ctag = ($_ | ?{$_.name -like "confidence:*" })) `
                                                      {($ctag.name -split ':')[1]}   }
-
+                        warninglist_names = $a.warnings.warninglist_name
+                        warninglist_ids = $a.warnings.warninglist_id
                     }
                 }
                 
@@ -90,6 +98,3 @@ Function Get-MISPAttributes {
 
     return $attributeResults
 }
-
-
-Export-ModuleMember -Function Get-MISPAttributes
